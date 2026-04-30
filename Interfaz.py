@@ -14,7 +14,9 @@ import websocket
 WS_URL      = "ws://192.168.4.1:81"
 BUFFER_SIZE = 1000          
 RECONECTAR  = True
-CSV_FILENAME = "registro_MOTOR.csv"  # <-- NUEVO: Nombre del archivo CSV
+CSV_FILENAME = "registro_MOTOR.csv" 
+
+VENTANA_SEG = 5.0  # <-- NUEVO: Segundos máximos a mostrar en las gráficas
 
 # Umbrales ISO 2372
 THR_GOOD    = 0.05
@@ -41,13 +43,10 @@ def on_message(ws, message):
         if len(partes) < 7:
             return
 
-        # --- NUEVO: Guardar en CSV ------------------------------------------
-        # Capturamos la hora del sistema (con milisegundos)
+        # Guardar en CSV
         fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        # Abrimos en modo "a" (append) para no borrar lo anterior
         with open(CSV_FILENAME, "a") as f:
             f.write(f"{fecha_hora},{message}\n")
-        # --------------------------------------------------------------------
 
         ts   = int(partes[0]) / 1000.0    # ms → s
         rpm  = int(partes[1])
@@ -65,23 +64,19 @@ def on_message(ws, message):
     except Exception:
         pass
 
-
 def on_open(ws):
     estado_ws["conectado"] = True
     estado_ws["ultimo"]    = "Conectado"
     print("[WS] Conectado a", WS_URL)
-
 
 def on_close(ws, code, msg):
     estado_ws["conectado"] = False
     estado_ws["ultimo"]    = "Desconectado"
     print("[WS] Desconectado")
 
-
 def on_error(ws, error):
     estado_ws["ultimo"] = f"Error: {error}"
     print("[WS] Error:", error)
-
 
 def hilo_ws():
     while RECONECTAR:
@@ -96,7 +91,7 @@ def hilo_ws():
             ws.run_forever(ping_interval=10, ping_timeout=5)
         except Exception as e:
             print("[WS] Excepción:", e)
-        time.sleep(2)      # esperar antes de reconectar
+        time.sleep(2)
 
 
 # ─── Figura ─────────────────────────────────────────────────────────────────
@@ -109,11 +104,11 @@ gs = gridspec.GridSpec(3, 3, figure=fig,
                        left=0.07, right=0.97,
                        top=0.92,  bottom=0.08)
 
-ax_vib  = fig.add_subplot(gs[0, :])   # vibración RMS (fila completa)
-ax_x    = fig.add_subplot(gs[1, :])   # eje X filtrado
-ax_rpm  = fig.add_subplot(gs[2, 0])   # RPM
-ax_iso  = fig.add_subplot(gs[2, 1])   # indicador ISO (gauge)
-ax_hist = fig.add_subplot(gs[2, 2])   # histograma de vib
+ax_vib  = fig.add_subplot(gs[0, :])   
+ax_x    = fig.add_subplot(gs[1, :])   
+ax_rpm  = fig.add_subplot(gs[2, 0])   
+ax_iso  = fig.add_subplot(gs[2, 1])   
+ax_hist = fig.add_subplot(gs[2, 2])   
 
 # Colores
 C_VIB  = "#00e5ff"
@@ -127,6 +122,9 @@ for ax in [ax_vib, ax_x, ax_rpm]:
     ax.tick_params(colors="#aaaaaa", labelsize=8)
     for spine in ax.spines.values():
         spine.set_edgecolor("#333333")
+    
+    # <-- NUEVO: Fijamos los límites X desde el inicio para que no auto-escalen
+    ax.set_xlim(-VENTANA_SEG, 0)
 
 ax_iso.set_facecolor("#111111")
 ax_hist.set_facecolor("#111111")
@@ -142,9 +140,10 @@ ax_vib.set_ylabel("g", color="#aaaaaa", fontsize=8)
 ax_x.set_ylabel("g",   color="#aaaaaa", fontsize=8)
 ax_rpm.set_ylabel("RPM", color="#aaaaaa", fontsize=8)
 
-# Líneas iniciales
-line_vib,  = ax_vib.plot([], [], color=C_VIB,  lw=1.2, label="RMS")
-line_x,    = ax_x.plot([],   [], color=C_X,    lw=1.0, label="filtX")
+# Líneas iniciales (Añadimos RPM aquí para optimizar)
+line_vib, = ax_vib.plot([], [], color=C_VIB,  lw=1.2, label="RMS")
+line_x,   = ax_x.plot([],   [], color=C_X,    lw=1.0, label="filtX")
+line_rpm, = ax_rpm.plot([], [], color="#ff6d00", lw=1.2) # <-- NUEVO: Línea RPM pre-creada
 
 # Zonas ISO en ax_vib
 ax_vib.axhspan(0,         THR_GOOD,  alpha=0.08, color="green")
@@ -156,7 +155,7 @@ ax_vib.set_ylim(0, 0.5)
 ax_x.set_ylim(-0.4, 0.4)
 ax_x.axhline(0, color="#333333", lw=0.5)
 
-# Gauge ISO (texto grande)
+# Gauge ISO
 txt_iso = ax_iso.text(0.5, 0.5, "---",
                       ha="center", va="center",
                       fontsize=20, fontweight="bold",
@@ -185,7 +184,7 @@ def color_iso(v):
 def actualizar(frame):
     with lock:
         if len(buf_tiempo) < 2:
-            return line_vib, line_x
+            return line_vib, line_x, line_rpm
 
         t    = np.array(buf_tiempo)
         vib  = np.array(buf_vib)
@@ -195,28 +194,32 @@ def actualizar(frame):
     # Tiempo relativo al último punto
     t_rel = t - t[-1]
 
+    # <-- NUEVO: Filtramos los arreglos para mantener SÓLO los últimos 5 segundos
+    mascara = t_rel >= -VENTANA_SEG
+    t_rel_5s = t_rel[mascara]
+    vib_5s   = vib[mascara]
+    fx_5s    = fx[mascara]
+    rpms_5s  = rpms[mascara]
+
     # Gráfica VIB RMS
-    line_vib.set_data(t_rel, vib)
-    ax_vib.set_xlim(t_rel[0], 0)
-
+    line_vib.set_data(t_rel_5s, vib_5s)
+    
     # Gráfica eje X
-    line_x.set_data(t_rel, fx)
-    ax_x.set_xlim(t_rel[0], 0)
+    line_x.set_data(t_rel_5s, fx_5s)
+    
+    # <-- NUEVO: Gráfica RPM (Optimizado, sin usar cla() que congela la pantalla)
+    line_rpm.set_data(t_rel_5s, rpms_5s)
+    
+    # Ajuste dinámico de la altura del eje Y para RPM basado en los datos recientes
+    if len(rpms_5s) > 0:
+        rpm_min, rpm_max = np.min(rpms_5s), np.max(rpms_5s)
+        margen = max(10, (rpm_max - rpm_min) * 0.1)
+        ax_rpm.set_ylim(rpm_min - margen, rpm_max + margen)
 
-    # RPM (últimos puntos)
-    ax_rpm.cla()
-    ax_rpm.set_facecolor("#111111")
-    ax_rpm.grid(True, color=C_GRID, linewidth=0.5)
-    ax_rpm.plot(t_rel, rpms, color="#ff6d00", lw=1.2)
-    ax_rpm.set_ylabel("RPM", color="#aaaaaa", fontsize=8)
-    ax_rpm.set_xlim(t_rel[0], 0)
-    ax_rpm.tick_params(colors="#aaaaaa", labelsize=8)
-    ax_rpm.set_title("RPM", color="#cccccc", fontsize=9, pad=4)
-
-    # Histograma
+    # Histograma (Usando solo los datos de los últimos 5 segundos)
     ax_hist.cla()
     ax_hist.set_facecolor("#111111")
-    ax_hist.hist(vib, bins=30, color=C_VIB, alpha=0.7, edgecolor="none")
+    ax_hist.hist(vib_5s, bins=30, color=C_VIB, alpha=0.7, edgecolor="none")
     ax_hist.axvline(THR_GOOD,  color="green",  lw=0.8, ls="--")
     ax_hist.axvline(THR_SAT,   color="yellow", lw=0.8, ls="--")
     ax_hist.axvline(THR_UNSAT, color="orange", lw=0.8, ls="--")
@@ -230,7 +233,7 @@ def actualizar(frame):
     txt_iso.set_text(etiqueta)
     txt_iso.set_color(col)
     txt_vib_val.set_text(f"{v_actual:.4f} g")
-    ax_iso.set_facecolor(col + "22")   # fondo tenue del color
+    ax_iso.set_facecolor(col + "22") 
 
     # Estado conexión
     if estado_ws["conectado"]:
@@ -240,17 +243,15 @@ def actualizar(frame):
         txt_estado.set_text(f"○ {estado_ws['ultimo']} — reintentando...")
         txt_estado.set_color("#ff5555")
 
-    return line_vib, line_x
+    # Retornar los objetos actualizados permite a FuncAnimation optimizar el render
+    return line_vib, line_x, line_rpm
 
 
 # ─── Main ───────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    # --- NUEVO: Creación inicial del CSV si no existe ---
-    # Esto agrega la cabecera indicando las columnas la primera vez que corre.
     if not os.path.exists(CSV_FILENAME):
         with open(CSV_FILENAME, "w") as f:
             f.write("Fecha_Hora_PC,Timestamp_ESP_ms,RPM,AccX_g,AccY_g,FiltX_g,FiltY_g,Vibracion_RMS_g\n")
-    # ----------------------------------------------------
 
     t = threading.Thread(target=hilo_ws, daemon=True)
     t.start()
