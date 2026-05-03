@@ -25,7 +25,7 @@ const playbackSlider = document.getElementById('playback-slider');
 const selectSpeed = document.getElementById('select-speed');
 const playbackInfo = document.getElementById('playback-info');
 
-// Inputs de Fecha (Nuevos para la Fase 5)
+// Inputs de Fecha
 const inputFechaInicio = document.getElementById('fecha-inicio');
 const inputFechaFin = document.getElementById('fecha-fin');
 
@@ -61,7 +61,20 @@ function initVivoChart() {
         height: rectVivo.height || 400,
         scales: { x: { time: false }, y: { range: [0, 20] } },
         series: [{}, { stroke: "#10b981", width: 2, points: { show: false } }],
-        axes: [{ grid: { stroke: "#374151" }, stroke: "#9ca3af" }, { grid: { stroke: "#374151" }, stroke: "#9ca3af" }],
+        axes: [
+            { 
+                grid: { stroke: "#374151" }, 
+                stroke: "#9ca3af", 
+                label: "Muestras", // <-- CORREGIDO A MUESTRAS
+                labelSize: 30 
+            }, 
+            { 
+                grid: { stroke: "#374151" }, 
+                stroke: "#9ca3af", 
+                label: "Amplitud (mm/s)", 
+                labelSize: 40 
+            }
+        ],
         cursor: { show: false }
     };
     window.uplotVivo = new uPlot(optsVivo, chartDataVivo, graficaContenedorVivo);
@@ -75,8 +88,21 @@ function initHistoricoChart() {
         width: rectHist.width || 800,
         height: rectHist.height || 400,
         scales: { x: { time: false }, y: { range: [0, 20] } },
-        series: [{}, { stroke: "#3b82f6", width: 2, points: { show: false } }],
-        axes: [{ grid: { stroke: "#374151" }, stroke: "#9ca3af" }, { grid: { stroke: "#374151" }, stroke: "#9ca3af" }],
+        series: [{}, { stroke: "#3b82f6", width: 1, points: { show: false }, fill: "rgba(59, 130, 246, 0.1)" }],
+        axes: [
+            { 
+                grid: { stroke: "#374151" }, 
+                stroke: "#9ca3af", 
+                label: "Muestras", // <-- CORREGIDO A MUESTRAS
+                labelSize: 30 
+            }, 
+            { 
+                grid: { stroke: "#374151" }, 
+                stroke: "#9ca3af", 
+                label: "Amplitud (mm/s)", 
+                labelSize: 40 
+            }
+        ],
         cursor: { show: true }
     };
     // Inicializar vacía
@@ -88,25 +114,83 @@ function initHistoricoChart() {
 }
 
 // ==========================================
-// LÓGICA DE WEBSOCKET (MODO VIVO)
+// ESTADO DE CONEXIÓN UI 
+// ==========================================
+
+function actualizarEstadoConexion(estado) {
+    connectionDot.className = 'w-3.5 h-3.5 rounded-full ring-2 ring-dashboard-card transition-all duration-300';
+    
+    if (estado === 'inactivo') {
+        connectionStatus.textContent = 'Inactivo';
+        connectionStatus.className = 'text-sm font-medium text-red-500';
+        connectionDot.classList.add('bg-red-500');
+    } else if (estado === 'conectando') {
+        connectionStatus.textContent = 'Conectando...';
+        connectionStatus.className = 'text-sm font-medium text-yellow-500';
+        connectionDot.classList.add('bg-yellow-500', 'animate-pulse');
+    } else if (estado === 'conectado') {
+        connectionStatus.textContent = 'Conectado';
+        connectionStatus.className = 'text-sm font-medium text-green-500';
+        connectionDot.classList.add('bg-green-500');
+    }
+}
+
+// ==========================================
+// LÓGICA DE WEBSOCKET Y WATCHDOG
 // ==========================================
 
 let incomingDataBuffer = [];
 let uiBuffer = { rpm: [], vib: [] };
+let isFirstConnectionAttempt = true;
+let espWatchdog = null; // Temporizador para verificar si llegan datos de la ESP
 
 function connectWS() {
+    // Solo mostramos "Conectando" si es el primer intento, para evitar parpadeo infinito
+    if (isFirstConnectionAttempt) {
+        actualizarEstadoConexion('conectando');
+    }
+    
     const ws = new WebSocket(`ws://${window.location.hostname}:8080`);
-    ws.onopen = () => updateConnectionStatus(true);
+    
+    ws.onopen = () => {
+        isFirstConnectionAttempt = false;
+        // Nos conectamos al backend, pero esperamos en amarillo hasta ver datos de la ESP
+        actualizarEstadoConexion('conectando'); 
+    };
+    
     ws.onmessage = (event) => {
-        if (currentMode !== 'vivo') return; // Cortafuegos para no saturar CPU en modo histórico
+        if (currentMode !== 'vivo') return; 
         try {
             const data = JSON.parse(event.data);
-            uiBuffer.rpm.push(data.rpm || 0);
-            uiBuffer.vib.push(data.vibRMS || 0);
-            incomingDataBuffer.push(data.vibRMS || 0);
+            
+            // Si llegan datos reales, la ESP está transmitiendo
+            if (data.rpm !== undefined || data.vibRMS !== undefined) {
+                actualizarEstadoConexion('conectado'); // Verde
+                
+                // Reiniciar el Watchdog
+                clearTimeout(espWatchdog);
+                espWatchdog = setTimeout(() => {
+                    // Si pasan 2 segundos sin recibir datos nuevos, asumimos que la ESP se desconectó
+                    actualizarEstadoConexion('conectando'); 
+                }, 2000);
+
+                uiBuffer.rpm.push(data.rpm || 0);
+                uiBuffer.vib.push(data.vibRMS || 0);
+                incomingDataBuffer.push(data.vibRMS || 0);
+            }
         } catch (e) {}
     };
-    ws.onclose = () => { updateConnectionStatus(false); setTimeout(connectWS, 2000); };
+    
+    ws.onerror = () => {
+        // No actualizamos la UI aquí para evitar choque con onclose y eliminar el parpadeo
+    };
+    
+    ws.onclose = () => { 
+        clearTimeout(espWatchdog);
+        actualizarEstadoConexion('inactivo'); // Rojo
+        // Reintento silencioso en segundo plano cada 3 segundos
+        setTimeout(connectWS, 3000); 
+    };
 }
 
 // ==========================================
@@ -117,6 +201,11 @@ let playbackIndex = 0;
 let isPlaying = false;
 let playbackTimer = null;
 
+let lastUiUpdate = 0;
+let uiAccRpm = 0;
+let uiAccVib = 0;
+let uiAccCount = 0;
+
 async function loadHistoricalData() {
     if (!btnLoadData) return;
     btnLoadData.textContent = "Cargando...";
@@ -125,7 +214,6 @@ async function loadHistoricalData() {
         let url = '/api/historico';
         const params = new URLSearchParams();
         
-        // Capturar fechas si existen en el HTML
         if (inputFechaInicio && inputFechaInicio.value) params.append('inicio', inputFechaInicio.value);
         if (inputFechaFin && inputFechaFin.value) params.append('fin', inputFechaFin.value);
         
@@ -140,12 +228,10 @@ async function loadHistoricalData() {
             return;
         }
 
-        // Configurar Slider
         playbackSlider.max = historicalDataRaw.length - 1;
         playbackSlider.value = 0;
         playbackIndex = 0;
         
-        // Resetear la gráfica histórica (Efecto Rolling Window)
         chartDataHistorico = [
             Array.from({length: windowSize}, (_, i) => i),
             new Array(windowSize).fill(0)
@@ -165,48 +251,81 @@ async function loadHistoricalData() {
     }
 }
 
+// ==========================================
+// CONTROL DE REPRODUCCIÓN
+// ==========================================
+
+function pausePlayback() {
+    isPlaying = false;
+    if (playbackTimer) {
+        cancelAnimationFrame(playbackTimer);
+        playbackTimer = null;
+    }
+    
+    const btnPlay = document.getElementById('btn-play');
+    const btnPause = document.getElementById('btn-pause');
+    if (btnPlay) btnPlay.classList.remove('hidden');
+    if (btnPause) btnPause.classList.add('hidden');
+}
+
 function startPlayback() {
     if (isPlaying || historicalDataRaw.length === 0) return;
     isPlaying = true;
     
+    const btnPlay = document.getElementById('btn-play');
+    const btnPause = document.getElementById('btn-pause');
     if (btnPlay) btnPlay.classList.add('hidden');
     if (btnPause) btnPause.classList.remove('hidden');
     
-    const run = () => {
+    let lastUiUpdate = performance.now();
+    let uiAccumulatorRpm = 0;
+    let uiAccumulatorVib = 0;
+    let accumulatorCount = 0;
+    
+    const run = (timestamp) => {
         if (!isPlaying) return;
         
         const speed = selectSpeed ? parseInt(selectSpeed.value) : 1;
         
-        // Avanzar N puntos por frame dependiendo de la velocidad
         for (let i = 0; i < speed; i++) {
             if (playbackIndex >= historicalDataRaw.length) {
                 pausePlayback();
                 return;
             }
             
-            const data = historicalDataRaw[playbackIndex];
+            let currentData = historicalDataRaw[playbackIndex];
+            const vibValue = currentData.vibRMS !== undefined ? currentData.vibRMS : (currentData.valor_vibracion || 0);
+            const rpmValue = currentData.rpm || 0;
             
-            // Compatibilidad robusta: Soporta si la DB devuelve 'vibRMS' o 'valor_vibracion'
-            const vibValue = data.vibRMS !== undefined ? data.vibRMS : (data.valor_vibracion || 0);
-            const rpmValue = data.rpm || 0;
-            
-            // Actualizar Textos y UI
-            updateRPM(rpmValue);
-            updateISO(vibValue);
-            
-            // Empujar al array de la gráfica
             chartDataHistorico[1].push(vibValue);
             if (chartDataHistorico[1].length > windowSize) {
                 chartDataHistorico[1].shift();
             }
             
+            uiAccumulatorRpm += rpmValue;
+            uiAccumulatorVib += vibValue;
+            accumulatorCount++;
+            
             playbackIndex++;
         }
         
-        // Renderizar gráfica y slider
         window.uplotHistorico.setData(chartDataHistorico);
         if (playbackSlider) playbackSlider.value = playbackIndex;
-        if (playbackInfo) playbackInfo.textContent = `Puntos: ${playbackIndex} / ${historicalDataRaw.length}`;
+        
+        if (timestamp - lastUiUpdate >= 500 && accumulatorCount > 0) {
+            const avgRpm = Math.round(uiAccumulatorRpm / accumulatorCount);
+            const avgVib = uiAccumulatorVib / accumulatorCount;
+            
+            updateRPM(avgRpm);
+            updateISO(avgVib);
+            
+            uiAccumulatorRpm = 0;
+            uiAccumulatorVib = 0;
+            accumulatorCount = 0;
+            lastUiUpdate = timestamp;
+            
+            if (playbackInfo) playbackInfo.textContent = `Puntos: ${playbackIndex} / ${historicalDataRaw.length}`;
+        }
         
         playbackTimer = requestAnimationFrame(run);
     };
@@ -214,14 +333,6 @@ function startPlayback() {
     playbackTimer = requestAnimationFrame(run);
 }
 
-function pausePlayback() {
-    isPlaying = false;
-    if (btnPlay) btnPlay.classList.remove('hidden');
-    if (btnPause) btnPause.classList.add('hidden');
-    if (playbackTimer) cancelAnimationFrame(playbackTimer);
-}
-
-// Salto manual en el tiempo al mover el slider
 if (playbackSlider) {
     playbackSlider.oninput = () => {
         playbackIndex = parseInt(playbackSlider.value);
@@ -233,7 +344,6 @@ if (playbackSlider) {
             updateRPM(data.rpm || 0);
             updateISO(vibValue);
             
-            // Actualizamos la gráfica inyectando este dato
             chartDataHistorico[1].push(vibValue);
             if (chartDataHistorico[1].length > windowSize) chartDataHistorico[1].shift();
             if (window.uplotHistorico) window.uplotHistorico.setData(chartDataHistorico);
@@ -260,7 +370,6 @@ function renderLoopVivo() {
     requestAnimationFrame(renderLoopVivo);
 }
 
-// Suavizador visual de RPM/ISO (Throttle a 2Hz)
 setInterval(() => {
     if (currentMode === 'vivo' && uiBuffer.rpm.length > 0) {
         const avgRPM = uiBuffer.rpm.reduce((a, b) => a + b, 0) / uiBuffer.rpm.length;
@@ -271,16 +380,14 @@ setInterval(() => {
     }
 }, 500);
 
-// Control de Pestañas
 tabVivo.onclick = () => {
     currentMode = 'vivo';
     containerVivo.classList.remove('hidden');
     containerHistorico.classList.add('hidden');
     tabVivo.className = "px-6 py-2.5 rounded-lg text-sm font-semibold transition-all bg-gradient-to-r from-accent-blue to-blue-600 text-white shadow-lg";
     tabHistorico.className = "px-6 py-2.5 rounded-lg text-sm font-semibold transition-all text-gray-400 hover:text-white hover:bg-dashboard-card";
-    pausePlayback(); // Asegurar que el playback se detiene al ver en vivo
+    pausePlayback(); 
     
-    // Forzar redibujado de la gráfica por si cambió de tamaño estando oculta
     setTimeout(() => { if (window.uplotVivo) window.uplotVivo.setSize(graficaContenedorVivo.getBoundingClientRect()); }, 50);
 };
 
@@ -291,7 +398,6 @@ tabHistorico.onclick = () => {
     tabHistorico.className = "px-6 py-2.5 rounded-lg text-sm font-semibold transition-all bg-gradient-to-r from-accent-blue to-blue-600 text-white shadow-lg";
     tabVivo.className = "px-6 py-2.5 rounded-lg text-sm font-semibold transition-all text-gray-400 hover:text-white hover:bg-dashboard-card";
     
-    // Forzar redibujado de la gráfica histórica
     setTimeout(() => { if (window.uplotHistorico) window.uplotHistorico.setSize(graficaContenedorHistorico.getBoundingClientRect()); }, 50);
 };
 
@@ -307,34 +413,25 @@ function updateRPM(rpm) {
 
 function updateISO(vibRMS) {
     isoValor.textContent = vibRMS.toFixed(2);
-    // Lógica del Gauge SVG
     if(gaugeIndicator) {
         gaugeIndicator.style.strokeDashoffset = 314 * (1 - Math.min(vibRMS / 20, 1));
-        if (vibRMS < 4.5) gaugeIndicator.style.stroke = '#22c55e'; // Verde
-        else if (vibRMS < 7.1) gaugeIndicator.style.stroke = '#f59e0b'; // Amarillo
-        else if (vibRMS < 11.2) gaugeIndicator.style.stroke = '#f97316'; // Naranja
-        else gaugeIndicator.style.stroke = '#ef4444'; // Rojo
+        if (vibRMS < 4.5) gaugeIndicator.style.stroke = '#22c55e'; 
+        else if (vibRMS < 7.1) gaugeIndicator.style.stroke = '#f59e0b'; 
+        else if (vibRMS < 11.2) gaugeIndicator.style.stroke = '#f97316'; 
+        else gaugeIndicator.style.stroke = '#ef4444'; 
     }
-}
-
-function updateConnectionStatus(connected) {
-    connectionDot.className = `w-3.5 h-3.5 rounded-full ring-2 ring-dashboard-card ${connected ? 'connection-connected' : 'connection-disconnected'}`;
-    connectionStatus.textContent = connected ? 'ESP Emulador Conectado' : 'Desconectado (Esperando...)';
 }
 
 // ==========================================
 // ARRANQUE DEL SISTEMA
 // ==========================================
 
-// Inicializar gráficas primero
 initVivoChart();
 initHistoricoChart();
 
-// Conectar WebSockets y arrancar bucle de renderizado principal
 connectWS();
 renderLoopVivo();
 
-// Bindear botones a funciones
 if (btnLoadData) btnLoadData.onclick = loadHistoricalData;
 if (btnPlay) btnPlay.onclick = startPlayback;
 if (btnPause) btnPause.onclick = pausePlayback;

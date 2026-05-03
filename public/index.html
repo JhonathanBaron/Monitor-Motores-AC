@@ -29,7 +29,6 @@
 </head>
 <body class="bg-dashboard-bg text-gray-100 font-sans min-h-screen flex flex-col">
     
-    <!-- Navbar -->
     <nav class="bg-dashboard-card border-b border-dashboard-border px-6 py-4 flex items-center justify-between shadow-lg">
         <div class="flex items-center gap-3">
             <div class="w-10 h-10 bg-gradient-to-br from-accent-blue to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
@@ -43,7 +42,6 @@
             </div>
         </div>
         
-        <!-- Pestañas -->
         <div class="flex gap-2 bg-dashboard-bg rounded-xl p-1.5 border border-dashboard-border">
             <button id="tab-vivo" class="px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 bg-gradient-to-r from-accent-blue to-blue-600 text-white shadow-lg shadow-blue-500/25">
                 Monitoreo en Vivo
@@ -54,15 +52,11 @@
         </div>
     </nav>
 
-    <!-- Contenido Principal con Grid: 75% - 25% -->
     <main class="flex-1 p-4 grid grid-cols-12 gap-4">
         
-        <!-- Área Principal - Contenedores de Gráficas -->
         <section class="col-span-9 flex flex-col gap-4">
-            <!-- Gráfica en Vivo -->
             <div id="container-vivo" class="flex-1 bg-dashboard-card rounded-2xl border border-dashboard-border p-6 shadow-xl shadow-black/20 relative overflow-hidden">
                 <div id="grafica-principal" class="h-full w-full">
-                    <!-- Grid de fondo sutil -->
                     <div class="absolute inset-0 opacity-10" style="background-image: linear-gradient(rgba(59,130,246,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,0.3) 1px, transparent 1px); background-size: 40px 40px;"></div>
                     <div class="relative z-10 h-full flex items-center justify-center text-gray-500">
                         <p class="text-lg">Iniciando Gráfica en Tiempo Real...</p>
@@ -70,18 +64,16 @@
                 </div>
             </div>
 
-            <!-- Panel de Análisis Histórico (Oculto por defecto) -->
             <div id="container-historico" class="hidden flex-1 flex flex-col gap-4">
 
-                <!-- Panel de Filtros -->
                 <div class="bg-dashboard-card rounded-2xl border border-dashboard-border p-4 shadow-xl shadow-black/20 flex items-center gap-4">
                     <div class="flex items-center gap-2">
-                        <label for="inicio" class="text-sm text-gray-400">Inicio:</label>
-                        <input type="datetime-local" id="inicio" class="bg-dashboard-bg border border-dashboard-border text-gray-300 text-xs rounded-lg p-2 focus:ring-accent-blue outline-none">
+                        <label for="fecha-inicio" class="text-sm text-gray-400">Inicio:</label>
+                        <input type="datetime-local" id="fecha-inicio" class="bg-dashboard-bg border border-dashboard-border text-gray-300 text-xs rounded-lg p-2 focus:ring-accent-blue outline-none">
                     </div>
                     <div class="flex items-center gap-2">
-                        <label for="fin" class="text-sm text-gray-400">Fin:</label>
-                        <input type="datetime-local" id="fin" class="bg-dashboard-bg border border-dashboard-border text-gray-300 text-xs rounded-lg p-2 focus:ring-accent-blue outline-none">
+                        <label for="fecha-fin" class="text-sm text-gray-400">Fin:</label>
+                        <input type="datetime-local" id="fecha-fin" class="bg-dashboard-bg border border-dashboard-border text-gray-300 text-xs rounded-lg p-2 focus:ring-accent-blue outline-none">
                     </div>
                     <button id="btn-load-data" class="bg-accent-blue hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
@@ -89,29 +81,29 @@
                     </button>
                 </div>
 
-                <!-- Gráfica Histórica -->
                 <div class="flex-1 bg-dashboard-card rounded-2xl border border-dashboard-border p-6 shadow-xl shadow-black/20 relative overflow-hidden">
                     <div id="grafica-historico" class="h-full w-full"></div>
                 </div>
 
-                <!-- Controles de Playback -->
                 <div class="bg-dashboard-card rounded-2xl border border-dashboard-border p-4 shadow-xl shadow-black/20">
                     <div class="flex flex-col gap-4">
-                        <!-- Slider de Tiempo -->
                         <div class="flex items-center gap-4">
                             <span id="playback-time-start" class="text-xs font-mono text-gray-500">00:00</span>
                             <input type="range" id="playback-slider" class="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-accent-blue" min="0" value="0" step="1">
                             <span id="playback-time-end" class="text-xs font-mono text-gray-500">00:00</span>
                         </div>
 
-                        <!-- Botones de Acción -->
                         <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-3">
-                                <button id="btn-play" class="p-2 text-accent-green hover:bg-accent-green/10 rounded-full transition-colors">
-                                    <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"></path></svg>
+                            <div class="flex items-center gap-2">
+                                <button id="btn-play" class="flex items-center justify-center w-10 h-10 bg-green-600 hover:bg-green-500 text-white rounded-full transition-all shadow-lg hover:scale-105">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 ml-0.5">
+                                        <path fill-rule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z" clip-rule="evenodd" />
+                                    </svg>
                                 </button>
-                                <button id="btn-pause" class="p-2 text-accent-yellow hover:bg-accent-yellow/10 rounded-full transition-colors hidden">
-                                    <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 20 20"><path d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"></path></svg>
+                                <button id="btn-pause" class="hidden flex items-center justify-center w-10 h-10 bg-yellow-600 hover:bg-yellow-500 text-white rounded-full transition-all shadow-lg hover:scale-105">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                                        <path fill-rule="evenodd" d="M6.75 5.25a.75.75 0 0 1 .75-.75H9a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H7.5a.75.75 0 0 1-.75-.75V5.25Zm7.5 0A.75.75 0 0 1 15 4.5h1.5a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H15a.75.75 0 0 1-.75-.75V5.25Z" clip-rule="evenodd" />
+                                    </svg>
                                 </button>
                             </div>
 
@@ -130,10 +122,8 @@
             </div>
         </section>
 
-        <!-- Panel Lateral (25%) -->
         <aside class="col-span-3 flex flex-col gap-4">
             
-            <!-- RPM Actuales - Tarjeta Premium -->
             <div class="bg-dashboard-card rounded-2xl border border-dashboard-border p-6 shadow-xl shadow-black/20">
                 <div class="flex items-center gap-2 mb-4">
                     <div class="w-2 h-2 rounded-full bg-accent-blue"></div>
@@ -143,40 +133,32 @@
                     <span id="rpm-valor" class="text-6xl font-bold bg-gradient-to-r from-accent-blue to-cyan-400 bg-clip-text text-transparent">0</span>
                     <span class="text-gray-500 text-lg font-medium">rpm</span>
                 </div>
-                <!-- Barra de progreso RPM -->
                 <div class="mt-4 h-2 bg-dashboard-border rounded-full overflow-hidden">
                     <div id="rpm-bar" class="h-full bg-gradient-to-r from-accent-blue to-cyan-400 rounded-full transition-all duration-300" style="width: 0%"></div>
                 </div>
             </div>
 
-            <!-- Indicador ISO 2372 - Tarjeta Premium -->
             <div class="bg-dashboard-card rounded-2xl border border-dashboard-border p-6 shadow-xl shadow-black/20 flex-1">
                 <div class="flex items-center gap-2 mb-4">
                     <div class="w-2 h-2 rounded-full bg-accent-green"></div>
                     <h3 class="text-gray-400 text-xs uppercase tracking-widest font-semibold">Estado ISO 2372</h3>
                 </div>
                 
-                <!-- Gauge Circular -->
                 <div class="relative w-48 h-48 mx-auto">
                     <svg class="w-full h-full transform -rotate-90" viewBox="0 0 120 120">
-                        <!-- Círculo de fondo -->
                         <circle cx="60" cy="60" r="50" fill="none" stroke="#374151" stroke-width="10"/>
-                        <!-- Arco de fondo (tres zonas) -->
                         <circle cx="60" cy="60" r="50" fill="none" stroke="#22c55e" stroke-width="10" stroke-dasharray="52.3 157" stroke-dashoffset="0" opacity="0.3"/>
                         <circle cx="60" cy="60" r="50" fill="none" stroke="#f59e0b" stroke-width="10" stroke-dasharray="52.3 157" stroke-dashoffset="-52.3" opacity="0.3"/>
                         <circle cx="60" cy="60" r="50" fill="none" stroke="#ef4444" stroke-width="10" stroke-dasharray="52.3 157" stroke-dashoffset="-104.6" opacity="0.3"/>
-                        <!-- Indicador de progreso -->
                         <circle id="gauge-indicator" cx="60" cy="60" r="50" fill="none" stroke="#22c55e" stroke-width="10" 
                                 stroke-dasharray="314" stroke-dashoffset="314" stroke-linecap="round"/>
                     </svg>
-                    <!-- Valor central -->
                     <div class="absolute inset-0 flex flex-col items-center justify-center">
                         <span id="iso-valor" class="text-4xl font-bold text-white">0.0</span>
                         <span class="text-sm text-gray-500 mt-1">mm/s</span>
                     </div>
                 </div>
                 
-                <!-- Leyenda de zonas -->
                 <div class="mt-5 space-y-2">
                     <div class="flex items-center justify-between text-xs">
                         <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-green-500"></span><span class="text-gray-300">Bueno</span></span>
@@ -197,7 +179,6 @@
                 </div>
             </div>
 
-            <!-- Estado de Conexión -->
             <div class="bg-dashboard-card rounded-2xl border border-dashboard-border p-4 shadow-xl shadow-black/20">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3">
