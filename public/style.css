@@ -79,6 +79,13 @@
 }
 
 /* Efectos de hover en las tarjetas */
+#grafica-principal {
+    height: 100%;
+    min-height: 400px;
+    overflow: hidden;
+    position: relative;
+}
+
 #grafica-principal,
 #rpm-valor,
 #iso-valor {

@@ -1,56 +1,73 @@
 #include <WiFi.h>
 #include <WebSocketsServer.h>
 
-// Credenciales del Access Point emulado
 const char *ssid = "VibSensor_Emulador";
-const char *password = "12345678"; // Mínimo 8 caracteres
+const char *password = "12345678";
 
-// Servidor WebSocket en el puerto 81 (como lo espera Node.js)
 WebSocketsServer webSocket = WebSocketsServer(81);
 
 unsigned long lastTime = 0;
-const int timerDelay = 5; // 5 milisegundos = 200 Hz
+const int timerDelay = 5; // 200 Hz
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("Iniciando Emulador VibSensor...");
-
-  // Configurar ESP32 como Access Point
   WiFi.softAP(ssid, password);
-  
-  // Por defecto, la IP del Access Point en ESP32 es 192.168.4.1
-  IPAddress myIP = WiFi.softAPIP();
-  Serial.print("Access Point Iniciado. IP: ");
-  Serial.println(myIP);
-
-  // Iniciar servidor WebSocket
   webSocket.begin();
-  Serial.println("WebSocket Server iniciado en el puerto 81");
+  Serial.println("Emulador Avanzado Iniciado...");
 }
 
 void loop() {
-  webSocket.loop(); // Mantener vivas las conexiones
+  webSocket.loop(); 
 
   unsigned long currentTime = millis();
   
-  // Disparar cada 5ms (200Hz)
   if ((currentTime - lastTime) >= timerDelay) {
     
-    // --- GENERACIÓN DE DATOS PLAUSIBLES ---
-    float t = currentTime / 1000.0; // Tiempo en segundos
+    float t = currentTime / 1000.0; // Segundos
     
-    // RPM: Motor nominal de 1800 RPM con ligera fluctuación
-    int rpm = 1790 + random(-10, 11); 
-    
-    // Aceleración: Onda senoidal base (vibración natural) + ruido aleatorio
-    float accX = 1.5 * sin(t * 60) + (random(-20, 20) / 100.0);
-    float accY = 1.2 * cos(t * 60) + (random(-20, 20) / 100.0);
-    
-    // RMS: Simulemos un valor estable que oscila entre zona verde y amarilla ISO
-    float vibRMS = 1.8 + (random(-2, 3) / 10.0);
+    // --- LÓGICA DE SIMULACIÓN DE RPM (Saltos grandes) ---
+    int rpmBase = 0;
+    // Dividimos el tiempo en bloques de 5000ms (5 segundos). 
+    // El módulo 3 (% 3) nos da un ciclo infinito de 0, 1, 2.
+    int cicloRPM = (currentTime / 5000) % 3; 
 
-    // Construir el JSON exactamente como lo espera el backend
-    // Ej: {"timestamp":"12050","rpm":1795,"accX":1.45,"accY":1.12,"vibRMS":1.8}
+    if (cicloRPM == 0) {
+      rpmBase = 1000; // Nivel bajo
+    } else if (cicloRPM == 1) {
+      rpmBase = 1500; // Nivel medio
+    } else {
+      rpmBase = 2000; // Nivel alto
+    }
+
+    // Le añadimos un pequeño ruido mecánico (+/- 15 RPM)
+    int rpm = rpmBase + random(-15, 16); 
+    
+    // --- LÓGICA DE SIMULACIÓN DE VIBRACIÓN (0 a 13) ---
+    
+    // 1. Onda lenta: sube y baja suavemente
+    float ondaLenta = 5.0 * sin(t * 0.3) + 5.0; 
+    
+    // 2. Ruido mecánico constante
+    float ruido = random(-10, 11) / 10.0; 
+    
+    // 3. Pico brusco: Ocurre cada 12 segundos y dura 2 segundos
+    float pico = 0;
+    if ((currentTime % 12000) < 2000) {
+      pico = 3.0 * sin(((currentTime % 12000) / 2000.0) * PI);
+    }
+    
+    // Sumamos todos los comportamientos
+    float vibRMS = ondaLenta + ruido + pico;
+
+    // Forzamos los límites (Clamping)
+    if(vibRMS > 13.0) vibRMS = 13.0 - abs(ruido);
+    if(vibRMS < 0.0) vibRMS = abs(ruido);
+
+    // Ajustamos la aceleración a la proporción de la vibración actual
+    float accX = (vibRMS / 2.0) * sin(t * 60) + ruido;
+    float accY = (vibRMS / 2.0) * cos(t * 60) + ruido;
+
+    // Construcción del JSON
     String json = "{";
     json += "\"timestamp\":\"" + String(currentTime) + "\",";
     json += "\"rpm\":" + String(rpm) + ",";
@@ -59,7 +76,6 @@ void loop() {
     json += "\"vibRMS\":" + String(vibRMS);
     json += "}";
 
-    // Enviar a todos los clientes conectados (tu PC con Node.js)
     webSocket.broadcastTXT(json);
     
     lastTime = currentTime;

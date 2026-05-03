@@ -5,10 +5,23 @@ const { saveVibrationsBatch } = require('./database');
 
 const app = express();
 const PORT = 3000;
+const WS_SERVER_PORT = 8080;
 const ESP_WS_URL = 'ws://192.168.4.1:81';
 
 // Servir archivos estáticos del frontend
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Servidor WebSocket para el Frontend
+const wss = new WebSocket.Server({ port: WS_SERVER_PORT });
+
+function broadcastToClients(data) {
+    const message = JSON.stringify(data);
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+        }
+    });
+}
 
 // Buffer para acumular datos y evitar saturación de disco
 let dataBuffer = [];
@@ -18,17 +31,20 @@ const connectToESP = () => {
     const ws = new WebSocket(ESP_WS_URL);
 
     ws.on('open', () => {
-        console.log(`[WebSocket] Conectado exitosamente al ESP8266 en ${ESP_WS_URL}`);
+        console.log(`[ESP8266] Conectado exitosamente en ${ESP_WS_URL}`);
     });
 
     ws.on('message', (message) => {
         try {
-            // Intentar parsear si viene como JSON, de lo contrario manejarlo según formato
             const data = JSON.parse(message);
+            
+            // 1. Guardar en buffer para SQLite
             dataBuffer.push(data);
+            
+            // 2. Broadcast al Frontend en tiempo real
+            broadcastToClients(data);
+            
         } catch (err) {
-            // Si no es JSON, podríamos procesarlo como string o binario si fuera necesario
-            // Por ahora, asumimos formato compatible o log de error
             console.error('[WebSocket] Error parseando mensaje:', message.toString());
         }
     });
