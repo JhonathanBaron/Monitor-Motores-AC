@@ -50,35 +50,70 @@ const saveVibrationsBatch = db.transaction((dataBatch) => {
 });
 
 /**
- * Obtiene los registros de la base de datos con filtros opcionales.
+ * Obtiene los registros de la base de datos con filtros opcionales y decimación automática.
+ * Se implementa downsampling si el volumen de datos supera los 2000 registros para proteger la RAM del cliente.
  * @param {string} inicio - Fecha de inicio para el filtro.
  * @param {string} fin - Fecha de fin para el filtro.
  * @param {number} limit - Cantidad de registros a recuperar.
  */
 const getHistoricalData = (inicio, fin, limit) => {
-    let query = `
-        SELECT timestamp, rpm, accX, accY, vibRMS
-        FROM mediciones
-    `;
-
+    let whereClause = "";
     let params = [];
 
     if (inicio && fin) {
-        query += ` WHERE timestamp BETWEEN ? AND ?`;
+        whereClause = " WHERE timestamp BETWEEN ? AND ?";
         params = [inicio, fin];
-    }   
-
-    query += ` ORDER BY timestamp DESC`;
-
-    if (limit) {
-        query += ` LIMIT ?`;
-        params.push(limit);
     }
 
-    const stmt = db.prepare(query);
-    // Retornamos el array revertido (reverse) para que el gráfico de uPlot 
-    // lo pinte de izquierda a derecha (del dato más antiguo al más reciente)
-    return stmt.all(...params).reverse();
+    // 1. Conteo rápido para decidir si aplicamos decimación
+    const countQuery = `SELECT COUNT(*) as count FROM mediciones ${whereClause}`;
+    const countResult = db.prepare(countQuery).get(...params);
+    const totalCount = countResult ? countResult.count : 0;
+
+    // El número real de puntos a procesar es el menor entre el total y el límite solicitado
+    const effectiveCount = limit ? Math.min(totalCount, limit) : totalCount;
+
+    if (effectiveCount <= 2000) {
+        // CASO A: Pocos datos, retornamos todo tal cual (respetando filtros y limite)
+        let query = `
+            SELECT timestamp, rpm, accX, accY, vibRMS
+            FROM mediciones
+            ${whereClause}
+            ORDER BY timestamp DESC
+        `;
+        if (limit) {
+            query += " LIMIT ?";
+            return db.prepare(query).all(...params, limit).reverse();
+        }
+        return db.prepare(query).all(...params).reverse();
+    } else {
+        // CASO B: Decimación (Downsampling)
+        // Agrupamos en ~2000 cubos calculando promedios para señales y MAX para vibración (RMS)
+        const decimationQuery = `
+            WITH base_data AS (
+                SELECT timestamp, rpm, accX, accY, vibRMS
+                FROM mediciones
+                ${whereClause}
+                ORDER BY timestamp DESC
+                ${limit ? "LIMIT ?" : ""}
+            )
+            SELECT 
+                MIN(timestamp) as timestamp,
+                AVG(rpm) as rpm,
+                AVG(accX) as accX,
+                AVG(accY) as accY,
+                MAX(vibRMS) as vibRMS
+            FROM (
+                SELECT *, NTILE(2000) OVER (ORDER BY timestamp ASC) as bucket
+                FROM base_data
+            )
+            GROUP BY bucket
+            ORDER BY timestamp ASC
+        `;
+        
+        const finalParams = limit ? [...params, limit] : params;
+        return db.prepare(decimationQuery).all(...finalParams);
+    }
 };
 
 /**

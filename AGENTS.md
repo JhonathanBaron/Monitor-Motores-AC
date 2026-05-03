@@ -34,13 +34,14 @@ Sistema de monitoreo de condición para motores de corriente alterna (AC) con vi
    - Indicador RPM con barra de progreso
    - Gauge ISO 2372 con umbrales de severidad (verde/amarillo/naranja/rojo)
    - Estado de conexión en tiempo real
+   - Mejora del indicador visual de conexión en tiempo real (estilo LED con colores verde/rojo y brillo dinámico usando Tailwind)
 
 2. **Base de Datos (Phase 4)**
    - Schema SQLite con columna `timestamp`
    - Inserción por lotes (transaction) para performance
    - Endpoint `/api/historico` con filtros de fecha y límite
 
-3. **Interfaz de Análisis Histórico (Phase 5 - En desarrollo)**
+3. **Interfaz de Análisis Histórico (Phase 5)**
    - Panel de filtros de fecha (inicio/fin)
    - Gráfica uPlot histórica (instancia separada)
    - Controles de reproducción: Play/Pause
@@ -48,14 +49,9 @@ Sistema de monitoreo de condición para motores de corriente alterna (AC) con vi
    - Selector de velocidad (x1, x2, x5, x10)
    - Contador de puntos reproducidos
 
-### 🔄 En Progreso
-
-- **Playback histórico:** Lógica de reproducción con `requestAnimationFrame`
-- **Navegación temporal:** Slider vinculado a datos históricos
-- **Sincronización de UI:** Indicadores RPM/ISO durante playback
-
 ### ⏳ Pendiente
 
+- **Prioridad Alta:** Decimación (Downsampling) en backend: Agrupar/promediar datos en consultas de rangos grandes (horas/días) para evitar saturar la memoria RAM del navegador frontend debido a la alta frecuencia de adquisición (200Hz)
 - Exportación de datos a CSV
 - Análisis ISO 2372 visual en gráficas (overlays de zonas)
 - Empaquetado multiplataforma (Tauri para Windows, Capacitor para Android)
@@ -89,15 +85,8 @@ Sistema de monitoreo de condición para motores de corriente alterna (AC) con vi
 
 ## 🚀 Próximos Pasos
 
-1. **Finalizar playback histórico:**
-   - Validar que la navegación con slider actualice la gráfica
-   - Mostrar marcas de tiempo en el slider (inicio/fin)
-   - Sincronizar gauge RPM/ISO durante reproducción
+1. Implementar la Decimación (Downsampling) en el endpoint /api/historico.
 
-2. **Refinar endpoint histórico:**
-   - Integrar filtros de fecha (`inicio`/`fin`)
-   - Optimizar queries para grandes rangos de tiempo
+2. Implementar visualización de zonas de alerta ISO 2372 (overlays) en las gráficas de uPlot.
 
-3. **Testing:**
-   - Probar con emulador ESP8266
-   - Verificar persistsencia de datos en SQLite
+3. Exportación de datos a CSV.
