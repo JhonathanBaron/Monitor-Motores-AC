@@ -40,7 +40,7 @@ window.uplotVivo = null;
 window.uplotHistorico = null;
 
 // Buffers de Datos
-const xDataWindow = new Float32Array(windowSize).map((_, i) => i);
+const xDataWindow = new Float32Array(windowSize).map((_, i) => i / 200);
 let chartDataVivo = [ xDataWindow, new Float32Array(windowSize) ];
 let chartDataHistorico = [ xDataWindow, new Float32Array(windowSize) ];
 let historicalDataRaw = [];
@@ -62,7 +62,7 @@ function initVivoChart() {
             { 
                 grid: { stroke: "#374151" }, 
                 stroke: "#9ca3af", 
-                label: "Muestras", // <-- CORREGIDO A MUESTRAS
+                label: "Tiempo (s)", value: (u, v) => v.toFixed(1) + "s",
                 labelSize: 30 
             }, 
             { 
@@ -90,7 +90,7 @@ function initHistoricoChart() {
             { 
                 grid: { stroke: "#374151" }, 
                 stroke: "#9ca3af", 
-                label: "Muestras", // <-- CORREGIDO A MUESTRAS
+                label: "Tiempo (s)", value: (u, v) => v.toFixed(1) + "s",
                 labelSize: 30 
             }, 
             { 
@@ -344,8 +344,12 @@ if (playbackSlider) {
 // CICLOS Y EVENTOS GENERALES
 // ==========================================
 
-function renderLoopVivo() {
+let lastRenderTime = 0;
+const FPS_INTERVAL = 1000 / 30; // 33.33ms
+
+function renderLoopVivo(timestamp) {
     if (currentMode === 'vivo' && incomingDataBuffer.length > 0) {
+        // 1. Procesar todos los datos en memoria a máxima velocidad
         const len = incomingDataBuffer.length;
         if (len >= windowSize) {
             chartDataVivo[1].set(incomingDataBuffer.slice(-windowSize));
@@ -354,7 +358,12 @@ function renderLoopVivo() {
             chartDataVivo[1].set(incomingDataBuffer, windowSize - len);
         }
         incomingDataBuffer.length = 0;
-        if (window.uplotVivo) window.uplotVivo.setData(chartDataVivo);
+        
+        // 2. Renderizar visualmente SOLO si ha pasado el intervalo (30 FPS)
+        if (timestamp - lastRenderTime >= FPS_INTERVAL) {
+            if (window.uplotVivo) window.uplotVivo.setData(chartDataVivo);
+            lastRenderTime = timestamp;
+        }
     }
     requestAnimationFrame(renderLoopVivo);
 }
