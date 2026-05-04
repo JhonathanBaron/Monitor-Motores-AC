@@ -1,17 +1,29 @@
 const express = require('express');
 const WebSocket = require('ws');
 const path = require('path');
-const { saveVibrationsBatch, getHistoricalData, initDatabase } = require('./database');
+const { saveVibrationsBatch, getHistoricalData, initDatabase, exportCSVStream } = require('./database');
 
 const app = express();
 const PORT = 3000;
 const WS_SERVER_PORT = 8080;
 const ESP_WS_URL = 'ws://192.168.4.1:81';
 
+// Utilidad para limpiar el formato de fecha del frontend y que coincida con SQLite
+const formatSqliteDate = (dateStr) => {
+    if (!dateStr) return null;
+    // Reemplaza la 'T' del input HTML por un espacio
+    let formatted = dateStr.replace('T', ' ');
+    // Si no tiene segundos (longitud típica de 16 caracteres: YYYY-MM-DD HH:MM), los añadimos
+    if (formatted.length === 16) {
+        formatted += ':00';
+    }
+    return formatted;
+};
+
 // Endpoint para datos históricos
 app.get('/api/historico', (req, res) => {
-    const inicio = req.query.inicio;
-    const fin = req.query.fin;
+    const inicio = formatSqliteDate(req.query.inicio);
+    const fin = formatSqliteDate(req.query.fin);
     let data;
 
     try {
@@ -25,6 +37,21 @@ app.get('/api/historico', (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Error al consultar la base de datos' });
+    }
+});
+
+// Ruta para exportar datos a CSV
+app.get('/api/exportar', (req, res) => {
+    const inicio = formatSqliteDate(req.query.inicio);
+    const fin = formatSqliteDate(req.query.fin);
+    try {
+        // Delegamos la escritura del CSV directamente a database.js
+        exportCSVStream(inicio, fin, res);
+    } catch (err) {
+        console.error("[Backend] Error exportando CSV:", err);
+        if (!res.headersSent) {
+            res.status(500).send("Error interno generando el archivo CSV");
+        }
     }
 });
 

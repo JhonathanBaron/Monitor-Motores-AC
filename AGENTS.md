@@ -1,92 +1,75 @@
 # 🤖 Project Context: VibSensor (Vibration & RPM Monitor)
 
-Sistema de monitoreo de condición para motores de corriente alterna (AC) con visualización en tiempo real y análisis histórico.
+Sistema de monitoreo de condición para motores de corriente alterna (AC) con visualización en tiempo real y análisis histórico, optimizado para alta frecuencia de muestreo.
 
-## 🛠 Stack Tecnológico
+## 🛠 Stack Tecnológico Actualizado
 
 | Capa | Tecnología |
 |------|-------------|
 | **Backend** | Node.js (Express) + `ws` (WebSocket) + `better-sqlite3` |
-| **Frontend** | HTML5, TailwindCSS, uPlot.js (gráficos de alto rendimiento) |
-| **Hardware** | ESP8266/ESP32 (sensor emulado: Access Point `VibSensor_Emulador`) |
+| **Frontend** | HTML5, TailwindCSS, uPlot.js (Gráficos de ultra-alto rendimiento) |
+| **Hardware** | ESP8266/ESP32 (Conexión vía WebSocket local) |
+| **Control de Versiones** | Git (Flujo Local -> Remoto GitHub/GitLab) |
 
-## 📡 Conectividad
+## 📡 Conectividad y Puertos
 
-- **Puerto 3000:** Servidor HTTP (Interfaz web)
-- **Puerto 8080:** WebSocket → Frontend (datos en tiempo real)
-- **WebSocket ESP:** `ws://192.168.4.1:81` (desde ESP8266)
-- **Base de datos:** `datos_motor.sqlite` (persistencia SQLite)
+- **Puerto 3000:** Servidor HTTP (Interfaz de usuario)
+- **Puerto 8080:** Canal de WebSocket para streaming de datos.
+- **Lógica de Conexión:** - **Inactivo (Rojo):** Sin comunicación con el backend (Node.js).
+  - **Conectando (Amarillo):** Backend activo, esperando flujo de datos real de la ESP.
+  - **Conectado (Verde):** Flujo de datos activo (Watchdog activo: 2s de tolerancia).
 
 ## 📊 Arquitectura de Datos
 
-- **Frecuencia de adquisición:** ~200 Hz (del sensor)
-- **Buffer de insertion:** Lotes cada 200ms (~40 registros por lote)
-- **Gráficas:** 60 FPS (desacoplado de la frecuencia de recepción)
-- **UI gauges:** 2 Hz (500ms) para texto/barras
+- **Frecuencia de adquisición:** ~200 Hz (Muestreo del sensor).
+- **Ejes de Gráficas:** Eje X basado en **Muestras** (Samples) para precisión técnica; Eje Y en **Amplitud (mm/s)**.
+- **Renderizado:** Desacoplado. Gráficas a 60 FPS via `requestAnimationFrame`.
+- **UI Update:** Throttling estricto a 2 Hz (500ms) para lecturas numéricas y gauges para ahorro de CPU.
 
 ## 📋 Estado Actual del Proyecto
 
-### ✅ Completado
+### ✅ Completado (Hitos Alcanzados)
 
-1. **Monitoreo en Vivo (Phase 1-3)**
-   - WebSocket servidor en puerto 8080
-   - Gráfica uPlot con ventana deslizante (1000 puntos)
-   - Indicador RPM con barra de progreso
-   - Gauge ISO 2372 con umbrales de severidad (verde/amarillo/naranja/rojo)
-   - Estado de conexión en tiempo real
-   - Mejora del indicador visual de conexión en tiempo real (estilo LED con colores verde/rojo y brillo dinámico usando Tailwind)
+1.  **Dashboard Vivo (Fase 1-3 + Mejoras)**
+    - Sistema de 3 estados de conexión con lógica de "Watchdog" para detectar desconexión real de la ESP.
+    - Reintento de conexión silencioso (sin parpadeo visual de UI).
+    - Gráfica `uplotVivo` con labels técnicos corregidos ("Muestras").
+    - Gauge dinámico ISO 2372 con cambio de color por umbrales.
 
-2. **Base de Datos (Phase 4)**
-   - Schema SQLite con columna `timestamp`
-   - Inserción por lotes (transaction) para performance
-   - Endpoint `/api/historico` con filtros de fecha y límite
+2.  **Persistencia y API (Fase 4)**
+    - Base de datos SQLite optimizada para inserciones masivas.
+    - Endpoint `/api/historico` funcional con filtros de tiempo.
 
-3. **Interfaz de Análisis Histórico (Phase 5)**
-   - Panel de filtros de fecha (inicio/fin)
-   - Gráfica uPlot histórica (instancia separada)
-   - Controles de reproducción: Play/Pause
-   - Slider de navegación temporal
-   - Selector de velocidad (x1, x2, x5, x10)
-   - Contador de puntos reproducidos
+3.  **Análisis Histórico (Fase 5)**
+    - Reproductor (Playback) con aceleración (x1 a x10).
+    - Slider de navegación temporal vinculado a los buffers de uPlot.
+    - Sincronización de pestañas (Pause automático al cambiar a Vivo).
 
-### ⏳ Pendiente
+### ⏳ Pendiente (Cola de Trabajo)
 
-- **Prioridad Alta:** Decimación (Downsampling) en backend: Agrupar/promediar datos en consultas de rangos grandes (horas/días) para evitar saturar la memoria RAM del navegador frontend debido a la alta frecuencia de adquisición (200Hz)
-- Exportación de datos a CSV
-- Análisis ISO 2372 visual en gráficas (overlays de zonas)
-- Empaquetado multiplataforma (Tauri para Windows, Capacitor para Android)
-- Selección de directorio de almacenamiento
+1.  **Prioridad 1: Decimación (Downsampling) en Backend:** - Implementar lógica en el servidor para promediar puntos cuando el rango de fechas solicitado sea muy amplio (evitar que el navegador colapse con 100,000+ puntos).
+2.  **Análisis ISO 2372 Visual:** - Agregar bandas de color (Overlays) permanentes en el fondo de las gráficas uPlot para identificar zonas A, B, C y D de vibración.
+3.  **Exportación:**
+    - Botón para descargar el rango actual del histórico en formato CSV.
+4.  **Optimización de Memoria (Frontend):** - Implementar un límite de memoria para el buffer de la gráfica en vivo para evitar fugas tras horas de uso continuo.
+5.  **Empaquetado:** - Evaluación de Tauri para generar un ejecutable `.exe` ligero.
 
 ## 🎯 Reglas Críticas para Desarrollo
 
-1. **Gráficas uPlot:**
-   - Contenedores con `height` FIJA (400px) en CSS
-   - Instancias separadas: `uplotVivo` (verde) y `uplotHistorico` (azul)
-   - Usar `requestAnimationFrame` para renderizado
+1.  **Manipulación de Gráficas:**
+    - NUNCA destruir la instancia de uPlot al cambiar de pestaña; usar `.setSize()` para ajustar el layout al volver a mostrar el contenedor.
+    - El eje X siempre debe etiquetarse como "Muestras" a menos que se implemente el cálculo de tiempo real basado en frecuencia de muestreo.
 
-2. **Performance:**
-   - Buffer de datos desacoplado del renderizado
-   - UI text/gauge a 2Hz, charts a 60FPS
-   - Batch inserts a SQLite cada 200ms
+2.  **Gestión de Estados:**
+    - `currentMode` rige si los datos del WebSocket se guardan en el buffer de la gráfica o se ignoran (cortafuegos de CPU).
 
-3. **Sincronización:**
-   - `currentMode` ('vivo' | 'historico') controla flujo de datos
-   - Pause playback al cambiar a pestaña Vivo
+3.  **Git Workflow:**
+    - Realizar commits descriptivos (`feat:`, `fix:`, `refactor:`) antes de iniciar cambios en la arquitectura de datos.
 
-## 📁 Archivos Clave
+## 📁 Estructura de Archivos
 
-| Archivo | Propósito |
-|---------|------------|
-| `src/backend.js` | Servidor Express + WebSocket + API |
-| `src/database.js` | Schema SQLite + queries + batch insert |
-| `public/app.js` | Lógica frontend, uPlot, playback |
-| `public/index.html` | UI con TailwindCSS |
-| `public/style.css` | Estilos específicos de gráficas |
-
-## 🚀 Próximos Pasos
-
-1. Implementar la Decimación (Downsampling) en el endpoint /api/historico.
-
-2. Implementar visualización de zonas de alerta ISO 2372 (overlays) en las gráficas de uPlot.
-
-3. Exportación de datos a CSV.
+- `src/backend.js`: Lógica de servidor y orquestación de WebSockets.
+- `src/database.js`: Operaciones CRUD y optimización de transacciones.
+- `public/app.js`: Cerebro del frontend (uPlot, lógica de conexión y playback).
+- `public/index.html`: Layout basado en TailwindCSS.
+- `AGENTS.md`: Contexto y hoja de ruta (este archivo).

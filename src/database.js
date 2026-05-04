@@ -4,6 +4,9 @@ const path = require('path');
 const dbPath = path.join(__dirname, '..', 'datos_motor.sqlite');
 const db = new Database(dbPath);
 
+// Activar modo WAL para permitir lecturas y escrituras simultáneas sin bloqueos
+db.pragma('journal_mode = WAL');
+
 // ==============================================================
 // 1. INICIALIZACIÓN SÍNCRONA DIRECTA
 // Se ejecuta al instante. Garantiza que la tabla existe ANTES
@@ -12,7 +15,7 @@ const db = new Database(dbPath);
 db.exec(`
     CREATE TABLE IF NOT EXISTS mediciones (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        timestamp DATETIME DEFAULT (datetime('now', 'localtime')),
         rpm INTEGER,
         accX REAL,
         accY REAL,
@@ -117,6 +120,39 @@ const getHistoricalData = (inicio, fin, limit) => {
 };
 
 /**
+ * Exporta datos a CSV usando iteradores de better-sqlite3 (streaming)
+ * Escribe directamente en el objeto Response HTTP para no saturar la RAM.
+ */
+const exportCSVStream = (inicio, fin, res) => {
+    let query = "SELECT timestamp, rpm, accX, accY, vibRMS FROM mediciones ORDER BY timestamp ASC";
+    let params = [];
+
+    if (inicio && fin) {
+        query = "SELECT timestamp, rpm, accX, accY, vibRMS FROM mediciones WHERE timestamp BETWEEN ? AND ? ORDER BY timestamp ASC";
+        params = [inicio, fin];
+    }
+
+    const stmt = db.prepare(query);
+
+    // Configurar headers para descarga
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="Telemetria_Motor_Completa.csv"');
+    
+    // Escribir cabecera con todos los nombres de columnas
+    res.write('timestamp,rpm,accel_x,accel_y,vibracion_rms\n');
+
+    let count = 0;
+    for (const row of stmt.iterate(...params)) {
+        // Escribir todas las columnas en cada fila
+        res.write(`${row.timestamp},${row.rpm},${row.accX},${row.accY},${row.vibRMS}\n`);
+        count++;
+    }
+
+    res.end();
+    console.log(`[DB] Exportación completa finalizada. Filas procesadas: ${count}`);
+};
+
+/**
  * Mantenemos la función initDatabase para no romper el backend.js
  * si es que este intenta llamarla en su arranque.
  */
@@ -128,5 +164,6 @@ const initDatabase = async () => {
 module.exports = {
   saveVibrationsBatch,
   getHistoricalData,
-  initDatabase
+  initDatabase,
+  exportCSVStream
 };

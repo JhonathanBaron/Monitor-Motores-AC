@@ -252,7 +252,7 @@ async function loadHistoricalData() {
         historicalDataRaw = await res.json();
         
         if (historicalDataRaw.length === 0) {
-            alert("No hay datos en el rango seleccionado.");
+            console.warn("[Histórico] No hay datos en el rango seleccionado.");
             btnLoadData.textContent = "Cargar Histórico";
             return;
         }
@@ -268,12 +268,12 @@ async function loadHistoricalData() {
         
         playbackInfo.textContent = `Puntos: 0 / ${historicalDataRaw.length}`;
         btnLoadData.textContent = "Cargar Histórico";
-        alert(`Éxito: Se cargaron ${historicalDataRaw.length} registros para analizar.`);
+        console.log(`[Histórico] Éxito: Se cargaron ${historicalDataRaw.length} registros para analizar.`);
         
     } catch (e) {
         console.error("Error cargando historial:", e);
         btnLoadData.textContent = "Error al Cargar";
-        alert("Hubo un error de conexión con la base de datos.");
+        console.error("[Histórico] Hubo un error de conexión con la base de datos.");
     }
 }
 
@@ -468,3 +468,27 @@ renderLoopVivo();
 if (btnLoadData) btnLoadData.onclick = loadHistoricalData;
 if (btnPlay) btnPlay.onclick = startPlayback;
 if (btnPause) btnPause.onclick = pausePlayback;
+
+// Lógica para exportar CSV
+document.getElementById('btn-export-csv').addEventListener('click', () => {
+    const inicio = document.getElementById('fecha-inicio').value;
+    const fin = document.getElementById('fecha-fin').value;
+
+    // Construir la URL con los parámetros de fecha
+    let url = '/api/exportar';
+    const params = new URLSearchParams();
+    
+    if (inicio) params.append('inicio', inicio);
+    if (fin) params.append('fin', fin);
+    
+    if (params.toString()) {
+        url += `?${params.toString()}`;
+    }
+
+    // Notificar al usuario (opcional, mejora la experiencia)
+    console.log("Iniciando descarga de CSV desde:", url);
+    
+    // Disparar la descarga abriendo la URL en una nueva pestaña o ventana
+    // El navegador interpretará los headers del backend y descargará el archivo en lugar de navegar
+    window.location.href = url;
+});
